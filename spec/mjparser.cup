@@ -1,0 +1,292 @@
+package rs.ac.bg.etf.pp1;
+
+import java_cup.runtime.*;
+import org.apache.log4j.*;
+import rs.ac.bg.etf.pp1.ast.*;
+
+parser code {:
+
+	boolean errorDetected;
+
+	Logger log = Logger.getLogger(getClass());
+   
+    // slede redefinisani metodi za prijavu gresaka radi izmene teksta poruke
+     
+    public void report_fatal_error(String message, Object info) throws java.lang.Exception {
+      done_parsing();
+      report_error(message, info);
+    }
+  
+    public void syntax_error(Symbol cur_token) {
+        report_error("\nSintaksna greska", cur_token);
+    }
+  
+    public void unrecovered_syntax_error(Symbol cur_token) throws java.lang.Exception {
+        report_fatal_error("Fatalna greska, parsiranje se ne moze nastaviti", cur_token);
+    }
+
+    public void report_error(String message, Object info) {
+    	errorDetected = true;
+    	StringBuilder msg = new StringBuilder(message); 
+    	if (info instanceof Symbol)
+            msg.append (" na liniji ").append(((Symbol)info).left);
+        log.error(msg.toString());
+    }
+
+:}
+
+init with {:
+	errorDetected = false;
+:}
+
+scan with {:
+	Symbol s = this.getScanner().next_token();
+	if (s != null && s.value != null) 
+		log.info(s.toString() + " " + s.value.toString());
+	return s;
+:}
+
+terminal PROG, CONST, NEW, PRINT, READ, RETURN, VOID, RANGE;
+terminal String IDENT;
+terminal Integer NUMCONST;
+terminal Character CHARCONST;
+terminal Boolean BOOLCONST;
+terminal PLUS, MINUS, MUL, DIV, MOD, EQ, NEQ, GT, GEQ, LT, LEQ, AND, OR, EQUAL, INC, DEC;
+terminal SEMI, DCOLON, COLON, COMMA, DOT, LPAREN, RPAREN, LANGLE, RANGLE, LBRACE, RBRACE, LAMBDA;
+
+nonterminal DeclList, Decls;
+nonterminal ConstDecl, ConstList;
+nonterminal GlobalVarDecl, GlobalVarDeclList, GlobalVarDeclUnit, AngleBracketsOpt;
+nonterminal MethodDeclList;
+nonterminal FormParsOpt, FormPars, FormParsUnit;
+nonterminal LocalVarDeclList, LocalVarDecl, LocalVarDeclUnit, LocalVarDeclArray;
+nonterminal StatementList, Statement;
+nonterminal ActPars, ActParsOpt;
+nonterminal Assignop, Addop, Mulop, DesignatorExprDesign, Label;
+
+nonterminal rs.etf.pp1.symboltable.concepts.Obj Program, ProgName;
+nonterminal rs.etf.pp1.symboltable.concepts.Obj MethodDecl, MethodTypeName;
+nonterminal rs.etf.pp1.symboltable.concepts.Obj ConstUnit;
+nonterminal rs.etf.pp1.symboltable.concepts.Obj Designator, DesignatorStatement, DesignatorAct;
+nonterminal rs.etf.pp1.symboltable.concepts.Struct Type, Consts, ReturnType, Expr, Factor, Term;
+
+/* Program */
+
+Program ::= (Program) PROG ProgName:p DeclList LBRACE MethodDeclList RBRACE;
+
+ProgName ::= (ProgName) IDENT:progName;
+
+/* Decl */
+
+DeclList ::= (DeclListT) DeclList Decls
+			| 
+			(DeclListEps) /* epsilon */
+			;
+			
+Decls ::= (DeclsConst) ConstDecl
+		| 
+		(DeclsGlobalVar) GlobalVarDecl
+		;
+	
+/* ConstDecl */
+				
+ConstDecl ::= (ConstDecl) CONST Type ConstList SEMI;
+
+Type ::= (Type) IDENT:typeName;
+		
+ConstList ::= (ConstListComma) ConstList COMMA ConstUnit
+			| 
+			(ConstListUnit) ConstUnit
+			;
+			
+ConstUnit ::= (ConstUnit) IDENT:ident EQUAL Consts;
+
+Consts ::= (ConstsNum) NUMCONST:numConst
+		| 
+		(ConstsChar) CHARCONST:charConst
+		| 
+		(ConstsBool) BOOLCONST:boolConst
+		;
+		
+/* GlobalVar */
+
+GlobalVarDecl ::= (GlobalVarDecl) Type:typeName GlobalVarDeclList;
+
+GlobalVarDeclList ::= (GlobalVarDeclListComma) GlobalVarDeclUnit COMMA GlobalVarDeclList
+					| 
+					(GlobalVarDeclListCommaErr) error:err COMMA
+					{: parser.report_error("Izvrsen oporavak do , u liniji " + errleft, null);  :}
+					| 
+					(GlobalVarDeclListSemi) GlobalVarDeclUnit SEMI
+					| 
+					(GlobalVarDeclListSemiErr) error:err SEMI
+					{: parser.report_error("Izvrsen oporavak do ; u liniji " + errleft, null);  :}
+					;
+
+GlobalVarDeclUnit ::= (GlobalVarDeclUnit) IDENT:name AngleBracketsOpt;
+
+AngleBracketsOpt ::= (AngleBracketsOptT) LANGLE RANGLE
+					| 
+					(AngleBracketsOptEps) /* epsilon */
+					;
+
+/* MethodDecl */
+
+MethodDeclList ::= (MethodDeclListT) MethodDeclList MethodDecl  
+				| 
+				(MethodDeclListEps) /* epsilon */
+				;
+				
+MethodDecl ::= (MethodDecl) MethodTypeName LPAREN FormParsOpt RPAREN LocalVarDeclList LBRACE StatementList RBRACE;
+
+MethodTypeName ::= (MethodTypeName) ReturnType:typeName IDENT:methName;
+
+ReturnType ::= (ReturnTypeNoVoid) Type:typeName
+			| 
+			(ReturnTypeVoid) VOID:typeName
+			;
+
+/* FormPars */
+
+FormParsOpt ::= (FormParsOptT) FormPars
+			| 
+			(FormParsOptEps) /* epsilon */
+			;
+
+FormPars ::= (FormParsListComma) FormParsUnit COMMA FormPars
+			|
+			(FormParsListUnit) FormParsUnit
+			;
+			
+FormParsUnit ::= (FormParsUnitBrackets) Type IDENT LANGLE RANGLE
+				| 
+				(FormParsUnitNoBrackets) Type IDENT
+				;
+			
+/* LocalVar */
+
+LocalVarDeclList ::= (LocalVarDeclListT) LocalVarDeclList LocalVarDecl
+					| 
+					(LocalVarDeclListEps) /* epsilon */
+					;
+			
+LocalVarDecl ::= (LocalVarDecl) Type:typeName LocalVarDeclUnit LocalVarDeclArray SEMI;
+
+LocalVarDeclUnit ::= (LocalVarDeclUnit) IDENT:name AngleBracketsOpt;
+
+LocalVarDeclArray ::= (LocalVarDeclArrayT) LocalVarDeclArray COMMA LocalVarDeclUnit
+					| 
+					(LocalVarDeclArrayEps) /* epsilon */
+					;
+
+/* Statement */
+
+StatementList ::= (StatementListT) StatementList Statement
+				|
+				(StatementListEps) /* epsilon */
+				;
+		
+Statement ::= (StatementDesignator) DesignatorStatement SEMI
+			|
+			(StatementReturnExpr) RETURN Expr SEMI
+			|
+			(StatementReturn) RETURN SEMI
+			|
+			(StatementRead) READ LPAREN Designator:designator RPAREN SEMI
+			|
+			(StatementPrint) PRINT LPAREN Expr:expr RPAREN SEMI
+			|
+			(StatementPrintNum) PRINT LPAREN Expr:expr COMMA NUMCONST RPAREN SEMI
+			|
+			(StatementStatementList) LBRACE StatementList RBRACE
+			|
+			(StatementErr) error:e SEMI
+			{: parser.report_error("Izvrsen oporavak do ; u liniji " + eleft, null); :}
+			;
+		
+DesignatorStatement ::= (DesignatorStatementAssign) Designator Assignop Expr:expr
+					|
+					(DesignatorStatementAct) DesignatorAct LPAREN ActParsOpt RPAREN 
+					|
+					(DesignatorStatementInc) Designator INC
+					|
+					(DesignatorStatementDec) Designator DEC
+					;
+
+Assignop ::= EQUAL;
+
+DesignatorAct ::= (DesignatorAct) Designator;
+
+/* ActPars */
+
+ActParsOpt ::= (ActParsOptT) ActPars
+			|
+			(ActParsOptEps) /* epsilon */
+			;
+					
+ActPars ::= (ActParsExpr) Expr
+		| 
+		(ActParsExprList) ActPars COMMA Expr
+		;
+
+/* Expr */
+
+Expr ::= (ExprAddop) Expr Addop Term
+		|
+		(ExprMinus) MINUS Term
+		|
+		(ExprTerm) Term
+		;
+
+Addop ::= (AddopPlus) PLUS
+		|
+		(AddopMinus) MINUS
+		;
+		
+/* Term */
+		
+Term ::= (TermMulop) Term Mulop Factor
+		|
+		(TermFactor) Factor
+		;
+
+Mulop ::= (MulopMul) MUL
+		|
+		(MulopDiv) DIV
+		|
+		(MulopMod) MOD
+		;
+		
+/* Factor */
+
+Factor ::= (FactorDesignator) Designator:designator
+		|
+		(FactorDesignatorAct) DesignatorAct LPAREN ActParsOpt RPAREN
+		|
+		(FactorNum) NUMCONST:numConst
+		|
+		(FactorChar) CHARCONST:charConst
+		|
+		(FactorBool) BOOLCONST:boolConst
+		|
+		(FactorNewExpr) NEW Type:typeName LANGLE Expr:expr RANGLE
+		|
+		(FactorNewAct) NEW Type:typeName LPAREN ActParsOpt RPAREN
+		|
+		(FactorExpr) LPAREN Expr:expr RPAREN
+		|
+		(FactorRange) RANGE LPAREN Expr:expr RPAREN
+		;
+
+/* Designator */
+	
+Designator ::= (DesignatorIdent) IDENT:ident 
+			|
+			(DesignatorExpr) DesignatorExprDesign LANGLE Expr RANGLE
+			;
+
+DesignatorExprDesign ::= (DesignatorExprDesign) Designator;
+
+/* Label */
+
+Label ::= (Label) IDENT;
