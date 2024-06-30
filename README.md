@@ -1,5 +1,5 @@
 # Description
-The compiler translates syntactically and semantically correct MicroJava programs into MicroJava bytecode, which can be executed on the MicroJava Virtual Machine (VM). The project was developed as part of the "Programski Prevodilac 1" course at the Faculty of Electrical Engineering, Belgrade.
+The compiler translates syntactically and semantically correct MicroJava programs into MicroJava bytecode, which can be executed on the MicroJava Virtual Machine (VM). The project was developed as part of the Compiler Construction 1 course at the Faculty of Electrical Engineering, Belgrade.
 
 ## Project Structure
 The compiler comprises four main components:
